@@ -1,4 +1,6 @@
 
+import os
+
 from collections.abc import Generator
 from pathlib import Path
 
@@ -14,10 +16,18 @@ from sqlalchemy.orm import (
 # Database Configuration
 # ==========================================
 
-# 資料庫檔案位置
-DATABASE_PATH = (
+# 預設正式／開發資料庫位置
+DEFAULT_DATABASE_PATH = (
     Path(__file__).resolve().parent.parent / "taiwan_mobile.db"
 )
+
+# 支援透過環境變數指定資料庫位置
+DATABASE_PATH = Path(
+    os.getenv(
+        "DATABASE_PATH",
+        str(DEFAULT_DATABASE_PATH),
+    )
+).expanduser().resolve()
 
 # SQLite Connection URL
 DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
@@ -27,7 +37,6 @@ DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
 # Database Engine
 # ==========================================
 
-# 建立資料庫 Engine
 engine = create_engine(
     DATABASE_URL,
     connect_args={
@@ -40,7 +49,6 @@ engine = create_engine(
 # Database Session
 # ==========================================
 
-# 建立 Session Factory
 SessionLocal = sessionmaker(
     bind=engine,
     autoflush=False,
@@ -52,7 +60,6 @@ SessionLocal = sessionmaker(
 # SQLAlchemy Base
 # ==========================================
 
-# 所有 ORM Model 的共同父類別
 class Base(DeclarativeBase):
     pass
 
@@ -61,7 +68,6 @@ class Base(DeclarativeBase):
 # Database Dependency
 # ==========================================
 
-# 每個 HTTP Request 取得獨立的 Database Session
 def get_db() -> Generator[Session, None, None]:
 
     db = SessionLocal()

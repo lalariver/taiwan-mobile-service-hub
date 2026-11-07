@@ -9,7 +9,6 @@ from ..models import EnterpriseService
 # 查詢企業服務
 # ==========================================
 
-# 查詢所有企業服務，支援分類及啟用狀態篩選
 def get_all_enterprise_services(
     db: Session,
     category: str | None = None,
@@ -85,8 +84,6 @@ def create_enterprise_service(
     )
 
     db.add(enterprise_service)
-    db.commit()
-    db.refresh(enterprise_service)
 
     return enterprise_service
 
@@ -111,9 +108,6 @@ def update_enterprise_service(
     enterprise_service.description = description
     enterprise_service.is_active = is_active
 
-    db.commit()
-    db.refresh(enterprise_service)
-
     return enterprise_service
 
 
@@ -127,4 +121,3 @@ def delete_enterprise_service(
 ) -> None:
 
     db.delete(enterprise_service)
-    db.commit()

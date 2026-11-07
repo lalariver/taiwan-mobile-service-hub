@@ -39,3 +39,6 @@ pnpm-debug.log*
 
 # Logs
 *.log
+
+# E2E Test Artifacts
+qa/.artifacts/

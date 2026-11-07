@@ -12,10 +12,42 @@ from ..repositories import enterprise_service_repository
 
 
 # ==========================================
+# Transaction Management
+# ==========================================
+
+def _commit_transaction(db: Session) -> None:
+    """提交 Transaction，失敗時回滾。"""
+
+    try:
+        db.commit()
+
+    except IntegrityError as exc:
+        db.rollback()
+
+        error_message = str(exc.orig).lower()
+
+        # SQLite：企業服務代碼唯一性衝突
+        if (
+            "unique constraint failed: "
+            "enterprise_services.code"
+        ) in error_message:
+
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Enterprise service code already exists",
+            ) from exc
+
+        raise
+
+    except Exception:
+        db.rollback()
+        raise
+
+
+# ==========================================
 # 查詢企業服務
 # ==========================================
 
-# 查詢所有企業服務，支援分類及啟用狀態篩選
 def list_enterprise_services(
     db: Session,
     category: str | None = None,
@@ -55,7 +87,6 @@ def get_enterprise_service(
 # 企業服務代碼驗證
 # ==========================================
 
-# 確認服務代碼是否已被其他服務使用
 def validate_service_code(
     db: Session,
     code: str,
@@ -88,14 +119,13 @@ def create_enterprise_service(
     service_data: EnterpriseServiceCreate,
 ) -> EnterpriseService:
 
-    # 新增前檢查服務代碼是否重複
     validate_service_code(
         db,
         service_data.code,
     )
 
-    try:
-        return enterprise_service_repository.create_enterprise_service(
+    enterprise_service = (
+        enterprise_service_repository.create_enterprise_service(
             db,
             code=service_data.code,
             name=service_data.name,
@@ -103,15 +133,13 @@ def create_enterprise_service(
             description=service_data.description,
             is_active=service_data.is_active,
         )
+    )
 
-    except IntegrityError as exc:
-        # 處理資料庫唯一性約束衝突
-        db.rollback()
+    _commit_transaction(db)
 
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Enterprise service code already exists",
-        ) from exc
+    db.refresh(enterprise_service)
+
+    return enterprise_service
 
 
 # ==========================================
@@ -137,8 +165,8 @@ def update_enterprise_service(
         current_service_id=service_id,
     )
 
-    try:
-        return enterprise_service_repository.update_enterprise_service(
+    enterprise_service = (
+        enterprise_service_repository.update_enterprise_service(
             db,
             enterprise_service,
             code=service_data.code,
@@ -147,14 +175,13 @@ def update_enterprise_service(
             description=service_data.description,
             is_active=service_data.is_active,
         )
+    )
 
-    except IntegrityError as exc:
-        db.rollback()
+    _commit_transaction(db)
 
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Enterprise service code already exists",
-        ) from exc
+    db.refresh(enterprise_service)
+
+    return enterprise_service
 
 
 # ==========================================
@@ -176,3 +203,5 @@ def delete_enterprise_service(
         db,
         enterprise_service,
     )
+
+    _commit_transaction(db)

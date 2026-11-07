@@ -1,0 +1,166 @@
+
+name: Quality Engineering CI
+
+# ==========================================
+# Workflow Triggers
+# ==========================================
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+
+# ==========================================
+# Permissions
+# ==========================================
+
+permissions:
+  contents: read
+
+
+# ==========================================
+# Concurrency
+# ==========================================
+
+concurrency:
+  group: quality-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+
+# ==========================================
+# Jobs
+# ==========================================
+
+jobs:
+
+  quality-check:
+
+    name: Automated Quality Checks
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 30
+
+    steps:
+
+      # --------------------------------------
+      # 1. Checkout Repository
+      # --------------------------------------
+
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+
+      # --------------------------------------
+      # 2. Setup Python
+      # --------------------------------------
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+
+      # --------------------------------------
+      # 3. Setup Node.js
+      # --------------------------------------
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+
+      # --------------------------------------
+      # 4. Install Python Dependencies
+      # --------------------------------------
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+
+      # --------------------------------------
+      # 5. Install Frontend Dependencies
+      # --------------------------------------
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci
+
+
+      # --------------------------------------
+      # 6. Install Playwright Browser
+      # --------------------------------------
+
+      - name: Install Playwright Chromium
+        run: |
+          python -m playwright install --with-deps chromium
+
+
+      # --------------------------------------
+      # 7. Prepare Test Reports
+      # --------------------------------------
+
+      - name: Prepare Test Reports
+        run: |
+          mkdir -p qa/.artifacts
+
+
+      # --------------------------------------
+      # 8. Run All Automated Tests
+      # --------------------------------------
+
+      - name: Run Pytest Suite
+        run: |
+          python -m pytest -v qa/tests \
+            --cov=backend \
+            --cov-branch \
+            --cov-fail-under=90 \
+            --cov-report=term-missing \
+            --cov-report=html:htmlcov \
+            --output=qa/.artifacts/playwright \
+            --screenshot=only-on-failure \
+            --tracing=retain-on-failure \
+            --junitxml=qa/.artifacts/pytest-junit.xml
+
+
+      # --------------------------------------
+      # 9. Build React Frontend
+      # --------------------------------------
+
+      - name: Build React Frontend
+        working-directory: frontend
+        run: npm run build
+
+
+      # --------------------------------------
+      # 10. Upload Test Artifacts
+      # --------------------------------------
+
+      - name: Upload Test Reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-engineering-reports
+          path: |
+            qa/.artifacts/
+            htmlcov/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+
